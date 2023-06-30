@@ -170,9 +170,9 @@ func (g *GoSync) Wait() error {
 	if len(panicErr) > 0 {
 		msg = panicErr[0].Error()
 		for i := 1; i < len(panicErr); i++ {
-			msg = fmt.Sprintf("%s\n%s", msg, panicErr[i])
+			msg = fmt.Sprintf("%s;%s", msg, panicErr[i])
 		}
-		b.WriteString(Red.Add("PANIC:\n"))
+		b.WriteString(Red.Add("PANIC:"))
 		b.WriteString(msg)
 	}
 
