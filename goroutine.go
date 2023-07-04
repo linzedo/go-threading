@@ -42,7 +42,8 @@ type (
 		errs        *errorsSafe
 		errChan     *chanm[error]
 		errChanOnce sync.Once
-		finish      atomic.Bool //已经结束的
+		finish      bool //已经结束的
+		mu          sync.Mutex
 	}
 
 	chanm[T any] struct {
@@ -92,7 +93,9 @@ func newGoS(goCount int) *GoSync {
 }
 
 func (g *GoSync) Go(f func() error) error {
-	if g.finish.Load() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.finish {
 		return errors.New("goroutine group control has ended")
 	}
 
@@ -100,7 +103,7 @@ func (g *GoSync) Go(f func() error) error {
 		return errors.New("the number of goroutines created exceeds the limit")
 	}
 
-	if g.limit != nil && !g.finish.Load() {
+	if g.limit != nil && !g.finish {
 		g.limit.getChan() <- struct{}{}
 	}
 
@@ -110,7 +113,9 @@ func (g *GoSync) Go(f func() error) error {
 				err := fmt.Errorf("%s,%s", getPanicCtx(), Red.Add(fmt.Sprintf("%v", r)))
 				g.panic.append(err)
 				if !g.wait {
-					g.finish.Store(true)
+					g.mu.Lock()
+					g.finish = true
+					g.mu.Unlock()
 					g.wChan.close()
 				}
 			}
@@ -146,7 +151,9 @@ func (g *GoSync) Err(err error) {
 	}
 
 	g.errChanOnce.Do(func() {
-		g.finish.Store(true)
+		g.mu.Lock()
+		g.finish = true
+		g.mu.Unlock()
 		g.errChan.getChan() <- err
 	})
 }
@@ -191,7 +198,10 @@ func (g *GoSync) Wait() error {
 }
 
 func (g *GoSync) close() {
-	g.finish.Store(true)
+	g.mu.Lock()
+	g.finish = true
+	g.mu.Unlock()
+
 	g.errChan.close()
 	//g.limit.close()
 	g.wChan.close()

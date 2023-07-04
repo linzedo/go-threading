@@ -44,7 +44,7 @@ func TestGoWait(t *testing.T) {
 }
 
 func TestWithoutWait(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		gs := New(Config{
 			Limit:   5,
 			GoCount: 4,
