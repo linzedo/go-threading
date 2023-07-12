@@ -74,31 +74,35 @@ func (c *chanOnce[T]) close() {
 }
 
 func New(config Config) *GoSync {
-	g := newGoS(config.GoCount)
+	if !config.NotReuse {
+		startPool()
+	}
+
+	g := newGoS()
 	if config.Limit > 0 {
 		g.limit = make(chan struct{}, config.Limit)
 	}
 
-	g.wait = config.Wait
-	g.reuse = !config.NotReuse
+	g.reset(config)
 
-	if g.reuse {
-		startPool()
-	}
 	return g
 }
 
-func newGoS(goCount int) *GoSync {
+func newGoS() *GoSync {
 	g := &GoSync{
-		workers: int64(goCount),
-		wChan:   newChanOnce[struct{}](0),
+		wChan:   newChanOnce[struct{}](1),
 		errChan: make(chan error, 1),
 		errs:    newError(),
 		panic:   newError(),
 	}
-	//g.working.Store(0)
-	//g.done.Store(0)
+
 	return g
+}
+
+func (g *GoSync) reset(config Config) {
+	g.workers = int64(config.GoCount)
+	g.wait = config.Wait
+	g.reuse = !config.NotReuse
 }
 
 func (g *GoSync) Go(f func() error) error {

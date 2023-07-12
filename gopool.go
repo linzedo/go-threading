@@ -21,6 +21,7 @@ type (
 		going      []*goChan //就绪队列，可获取已就绪routine的通讯,写入/移除过程保证有序
 		goCount    int64     //正在执行任务数量
 		goChanPool sync.Pool //通讯池
+		gsPool     sync.Pool //对象池
 		mu         sync.Mutex
 	}
 
@@ -28,6 +29,8 @@ type (
 		lastUseTime time.Time
 		task        chan *task
 	}
+
+	PoolOpt func(*goPool)
 
 	task struct {
 		job func() error
@@ -41,21 +44,25 @@ var (
 	once   sync.Once
 )
 
-func SetMaxWorkCount(count int64) {
-	if gp == nil || count == 0 {
-		return
+func SetMaxWorkCount(count int64) PoolOpt {
+	return func(*goPool) {
+		if gp == nil || count == 0 {
+			return
+		}
+		if count == -1 {
+			gp.MaxWorkCount = math.MaxInt
+		}
+		gp.MaxWorkCount = count
 	}
-	if count == -1 {
-		gp.MaxWorkCount = math.MaxInt
-	}
-	gp.MaxWorkCount = count
 }
 
-func SetMaxIdleWorkerDuration(duration time.Duration) {
-	if gp == nil || duration <= 0 {
-		return
+func SetMaxIdleWorkerDuration(duration time.Duration) PoolOpt {
+	return func(p *goPool) {
+		if gp == nil || duration <= 0 {
+			return
+		}
+		gp.MaxIdleWorkerDuration = duration
 	}
-	gp.MaxIdleWorkerDuration = duration
 }
 
 func tryGetTask() *task {
@@ -83,6 +90,7 @@ func newGoPool() *goPool {
 				return &goChan{task: make(chan *task, goChanCap)}
 			},
 		},
+		//gsPool: sync.Pool{New: func()any {return newGoS()} },
 	}
 }
 
@@ -98,9 +106,14 @@ func runGlobalTasks(t *task) {
 	gs.Err(t.job())
 }
 
-func startPool() {
+func startPool(opt ...PoolOpt) {
 	once.Do(func() {
 		gp = newGoPool()
+
+		for i := range opt {
+			opt[i](gp)
+		}
+
 		gp.start()
 	})
 }

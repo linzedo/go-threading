@@ -29,9 +29,15 @@ func BenchmarkCurrent10Reuse(b *testing.B) {
 	}
 }
 func BenchmarkCurrent10KReuse(b *testing.B) {
+	//var memStats runtime.MemStats
+	//runtime.ReadMemStats(&memStats)
 	for i := 0; i < b.N; i++ {
 		WithReuse(Concurrency * 10000)
 	}
+	//fmt.Printf("Allocated memory: %d bytes\n", memStats.Alloc)
+	//fmt.Printf("Total memory allocated and not yet freed: %d bytes\n", memStats.TotalAlloc)
+	//fmt.Printf("Heap memory allocated: %d bytes\n", memStats.HeapAlloc)
+	//fmt.Printf("Total heap memory obtained from system: %d bytes\n", memStats.HeapSys)
 }
 
 func BenchmarkCurrent1NotReuse1(b *testing.B) {
