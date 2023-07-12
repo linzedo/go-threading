@@ -30,40 +30,40 @@ type (
 
 	GoSync struct {
 		panic *errorsSafe
-		wChan *chanm[struct{}]
+		wChan *chanOnce[struct{}]
 
 		workers int64        //待开启的
 		working atomic.Int64 //正在执行的
 		done    atomic.Int64 //已结束的
 
-		limit *chanm[struct{}]
+		limit chan struct{}
 		wait  bool //是否等待协程组结束后结束阻塞
 
 		errs        *errorsSafe
-		errChan     *chanm[error]
+		errChan     chan error
 		errChanOnce sync.Once
 		finish      bool //已经结束的
 		mu          sync.Mutex
 	}
 
-	chanm[T any] struct {
+	chanOnce[T any] struct {
 		ch   chan T
 		once sync.Once
 	}
 )
 
-func newChanm[T any](buf int) *chanm[T] {
-	c := chanm[T]{
+func newChanOnce[T any](buf int) *chanOnce[T] {
+	c := chanOnce[T]{
 		ch: make(chan T, buf),
 	}
 	return &c
 }
 
-func (c *chanm[T]) getChan() chan T {
+func (c *chanOnce[T]) getChan() chan T {
 	return c.ch
 }
 
-func (c *chanm[T]) close() {
+func (c *chanOnce[T]) close() {
 	c.once.Do(func() {
 		if c != nil {
 			close(c.ch)
@@ -74,21 +74,22 @@ func (c *chanm[T]) close() {
 func New(config Config) *GoSync {
 	g := newGoS(config.GoCount)
 	if config.Limit > 0 {
-		g.limit = &chanm[struct{}]{ch: make(chan struct{}, config.Limit)}
+		g.limit = make(chan struct{}, config.Limit)
 	}
 	g.wait = config.Wait
 	return g
 }
 
 func newGoS(goCount int) *GoSync {
-	g := &GoSync{}
-	g.workers = int64(goCount)
-	g.working.Store(0)
-	g.done.Store(0)
-	g.wChan = newChanm[struct{}](0)
-	g.errChan = newChanm[error](1)
-	g.errs = newError()
-	g.panic = newError()
+	g := &GoSync{
+		workers: int64(goCount),
+		wChan:   newChanOnce[struct{}](0),
+		errChan: make(chan error, 1),
+		errs:    newError(),
+		panic:   newError(),
+	}
+	//g.working.Store(0)
+	//g.done.Store(0)
 	return g
 }
 
@@ -104,7 +105,7 @@ func (g *GoSync) Go(f func() error) error {
 	}
 
 	if g.limit != nil && !g.finish {
-		g.limit.getChan() <- struct{}{}
+		g.limit <- struct{}{}
 	}
 
 	g.goSafe(f)
@@ -129,7 +130,7 @@ func (g *GoSync) goSafe(f func() error) {
 				g.wChan.close()
 			}
 			if g.limit != nil {
-				<-g.limit.getChan()
+				<-g.limit
 			}
 		}()
 		g.Err(f())
@@ -159,7 +160,7 @@ func (g *GoSync) Err(err error) {
 		g.mu.Lock()
 		g.finish = true
 		g.mu.Unlock()
-		g.errChan.getChan() <- err
+		g.errChan <- err
 	})
 }
 
@@ -169,7 +170,7 @@ func (g *GoSync) Wait() error {
 	defer g.close()
 	select {
 	case <-g.wChan.getChan():
-	case err := <-g.errChan.getChan():
+	case err := <-g.errChan:
 		return err
 	}
 
@@ -207,7 +208,7 @@ func (g *GoSync) close() {
 	g.finish = true
 	g.mu.Unlock()
 
-	g.errChan.close()
+	close(g.errChan)
 	//g.limit.close()
 	g.wChan.close()
 
