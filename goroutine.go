@@ -107,6 +107,12 @@ func (g *GoSync) Go(f func() error) error {
 		g.limit.getChan() <- struct{}{}
 	}
 
+	g.goSafe(f)
+
+	return nil
+}
+
+func (g *GoSync) goSafe(f func() error) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -128,7 +134,6 @@ func (g *GoSync) Go(f func() error) error {
 		}()
 		g.Err(f())
 	}()
-	return nil
 }
 
 // Err 在异步任务中主动收集错误
