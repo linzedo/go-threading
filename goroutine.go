@@ -1,4 +1,4 @@
-package g
+package threading
 
 import (
 	"errors"
@@ -23,9 +23,10 @@ func init() {
 
 type (
 	Config struct {
-		Limit   int  //限制同时存在的协程数，0则不受限制
-		GoCount int  //要控制的协程数量
-		Wait    bool //是否等待所有goroutine执行完毕再关闭,遇到错误可立即结束阻塞,默认不等
+		Limit    int  //限制同时存在的协程数，0则不受限制
+		GoCount  int  //要控制的协程数量
+		Wait     bool //是否等待所有goroutine执行完毕再关闭,遇到错误可立即结束阻塞,默认不等
+		NotReuse bool //是否开启协程复用模式，默认开启
 	}
 
 	GoSync struct {
@@ -38,6 +39,7 @@ type (
 
 		limit chan struct{}
 		wait  bool //是否等待协程组结束后结束阻塞
+		reuse bool
 
 		errs        *errorsSafe
 		errChan     chan error
@@ -76,7 +78,13 @@ func New(config Config) *GoSync {
 	if config.Limit > 0 {
 		g.limit = make(chan struct{}, config.Limit)
 	}
+
 	g.wait = config.Wait
+	g.reuse = !config.NotReuse
+
+	if g.reuse {
+		startPool()
+	}
 	return g
 }
 
@@ -107,6 +115,13 @@ func (g *GoSync) Go(f func() error) error {
 	if g.limit != nil && !g.finish {
 		g.limit <- struct{}{}
 	}
+	if g.reuse {
+		gp.Serve(&task{
+			job: f,
+			gs:  g,
+		})
+		return nil
+	}
 
 	g.goSafe(f)
 
@@ -115,26 +130,29 @@ func (g *GoSync) Go(f func() error) error {
 
 func (g *GoSync) goSafe(f func() error) {
 	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				err := fmt.Errorf("%s,%s", getPanicCtx(), Red.Add(fmt.Sprintf("%v", r)))
-				g.panic.append(err)
-				if !g.wait {
-					g.mu.Lock()
-					g.finish = true
-					g.mu.Unlock()
-					g.wChan.close()
-				}
-			}
-			if g.done.Add(1) == g.workers {
-				g.wChan.close()
-			}
-			if g.limit != nil {
-				<-g.limit
-			}
-		}()
+		defer g.recover()
+
 		g.Err(f())
 	}()
+}
+
+func (g *GoSync) recover() {
+	if r := recover(); r != nil {
+		err := fmt.Errorf("%s,%s", getPanicCtx(), Red.Add(fmt.Sprintf("%v", r)))
+		g.panic.append(err)
+		if !g.wait {
+			g.mu.Lock()
+			g.finish = true
+			g.mu.Unlock()
+			g.wChan.close()
+		}
+	}
+	if g.done.Add(1) == g.workers {
+		g.wChan.close()
+	}
+	if g.limit != nil {
+		<-g.limit
+	}
 }
 
 // Err 在异步任务中主动收集错误

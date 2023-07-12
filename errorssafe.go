@@ -1,4 +1,4 @@
-package g
+package threading
 
 import (
 	"fmt"
