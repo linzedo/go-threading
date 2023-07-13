@@ -1,25 +1,27 @@
 package threading
 
 import (
+	"github.com/letsfire/factory"
+	"github.com/panjf2000/ants"
 	"sync"
 	"testing"
-	"time"
 )
 
 const (
-	Concurrency = 1
-	executeTime = 1000
+	Concurrency = 10
+	executeTime = 10000
+	goCount     = 10000
 )
+
+func Job() {
+	for i := 0; i < 100000; i++ {
+		i++
+	}
+}
 
 func BenchmarkCurrent1Reuse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		WithReuse(Concurrency)
-	}
-}
-
-func BenchmarkCurrent2Reuse(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		WithReuse(Concurrency * 2)
 	}
 }
 
@@ -28,16 +30,65 @@ func BenchmarkCurrent10Reuse(b *testing.B) {
 		WithReuse(Concurrency * 10)
 	}
 }
-func BenchmarkCurrent10KReuse(b *testing.B) {
-	//var memStats runtime.MemStats
-	//runtime.ReadMemStats(&memStats)
+
+func BenchmarkCurrent100Reuse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		WithReuse(Concurrency * 10000)
+		WithReuse(Concurrency * 100)
 	}
-	//fmt.Printf("Allocated memory: %d bytes\n", memStats.Alloc)
-	//fmt.Printf("Total memory allocated and not yet freed: %d bytes\n", memStats.TotalAlloc)
-	//fmt.Printf("Heap memory allocated: %d bytes\n", memStats.HeapAlloc)
-	//fmt.Printf("Total heap memory obtained from system: %d bytes\n", memStats.HeapSys)
+}
+
+func BenchmarkCurrent1kReuse(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		WithReuse(Concurrency * 1000)
+	}
+}
+
+func BenchmarkCurrent10kReuse(b *testing.B) {
+	//StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMaxWorkCount(10000))
+	for i := 0; i < b.N; i++ {
+		gs := New(Config{
+			GoCount: goCount,
+			Wait:    true,
+		})
+		for j := 0; j < goCount; j++ {
+			_ = gs.Go(func() error {
+				Job()
+				return nil
+			})
+		}
+		_ = gs.Wait()
+	}
+}
+
+//factory
+func BenchmarkCurrent10kReuseFactory(b *testing.B) {
+	var master = factory.NewMaster(goCount, goCount)
+	for i := 0; i < b.N; i++ {
+		var line1 = master.AddLine(func(args interface{}) {
+			Job()
+		})
+		for j := 0; j < goCount; j++ {
+			line1.Submit(j)
+		}
+		line1.Wait()
+	}
+}
+
+func BenchmarkCurrent10kReuseAnt(b *testing.B) {
+	p, _ := ants.NewPool(goCount)
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		for j := 0; j < goCount; j++ {
+			wg.Add(1)
+			_ = p.Submit(func() {
+				Job()
+				wg.Done()
+			})
+
+		}
+		wg.Wait()
+	}
+	p.Release()
 }
 
 func BenchmarkCurrent1NotReuse1(b *testing.B) {
@@ -45,14 +96,14 @@ func BenchmarkCurrent1NotReuse1(b *testing.B) {
 		WithoutReuse1(Concurrency * 1)
 	}
 }
-func BenchmarkCurrent2NotReuse1(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		WithoutReuse1(Concurrency * 2)
-	}
-}
 func BenchmarkCurrent10NotReuse1(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		WithoutReuse1(Concurrency * 10)
+	}
+}
+func BenchmarkCurrent100NotReuse1(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		WithoutReuse1(Concurrency * 100)
 	}
 }
 func BenchmarkCurrent10kNotReuse1(b *testing.B) {
@@ -66,14 +117,14 @@ func BenchmarkCurrent1NotReuse2(b *testing.B) {
 		WithoutReuse2(Concurrency * 1)
 	}
 }
-func BenchmarkCurrent2NotReuse2(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		WithoutReuse2(Concurrency * 2)
-	}
-}
 func BenchmarkCurrent10NotReuse2(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		WithoutReuse2(Concurrency * 10)
+	}
+}
+func BenchmarkCurrent100NotReuse2(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		WithoutReuse2(Concurrency * 100)
 	}
 }
 func BenchmarkCurrent10kNotReuse2(b *testing.B) {
@@ -89,7 +140,7 @@ func WithReuse(c int) {
 	})
 	for j := 0; j < c; j++ {
 		_ = gs.Go(func() error {
-			time.Sleep(time.Microsecond * executeTime)
+			Job()
 			return nil
 		})
 	}
@@ -104,7 +155,7 @@ func WithoutReuse1(c int) {
 	})
 	for j := 0; j < c; j++ {
 		_ = gs.Go(func() error {
-			time.Sleep(time.Microsecond * executeTime)
+			Job()
 			return nil
 		})
 	}
@@ -116,7 +167,7 @@ func WithoutReuse2(c int) {
 	for j := 0; j < c; j++ {
 		wp.Add(1)
 		go func() {
-			time.Sleep(time.Microsecond * executeTime)
+			Job()
 			wp.Done()
 		}()
 	}

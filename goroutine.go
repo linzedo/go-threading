@@ -12,7 +12,7 @@ import (
 
 var path string
 
-func init() {
+func initPath() {
 	dir, err := os.Getwd()
 	if err != nil {
 		panic(err)
@@ -30,8 +30,8 @@ type (
 	}
 
 	GoSync struct {
-		panic *errorsSafe
-		wChan *chanOnce[struct{}]
+		panic errorsSafe
+		wChan chanOnce[struct{}]
 
 		workers int64        //待开启的
 		working atomic.Int64 //正在执行的
@@ -41,7 +41,7 @@ type (
 		wait  bool //是否等待协程组结束后结束阻塞
 		reuse bool
 
-		errs        *errorsSafe
+		errs        errorsSafe
 		errChan     chan error
 		errChanOnce sync.Once
 		finish      bool //已经结束的
@@ -49,8 +49,10 @@ type (
 	}
 
 	chanOnce[T any] struct {
-		ch   chan T
-		once sync.Once
+		ch     chan T
+		mu     sync.Mutex
+		send   int
+		closed bool
 	}
 )
 
@@ -66,21 +68,28 @@ func (c *chanOnce[T]) getChan() chan T {
 }
 
 func (c *chanOnce[T]) close() {
-	c.once.Do(func() {
-		if c != nil {
-			close(c.ch)
-		}
-	})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed {
+		c.closed = true
+	}
+}
+
+func (c *chanOnce[T]) sentOnce(msg T) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.send == 0 {
+		c.send++
+		c.ch <- msg
+	}
 }
 
 func New(config Config) *GoSync {
-	if !config.NotReuse {
-		startPool()
-	}
+	StartPool()
 
-	g := newGoS()
-	if config.Limit > 0 {
-		g.limit = make(chan struct{}, config.Limit)
+	var g *GoSync
+	if gp != nil {
+		g = gp.gsPool.Get().(*GoSync)
 	}
 
 	g.reset(config)
@@ -90,10 +99,12 @@ func New(config Config) *GoSync {
 
 func newGoS() *GoSync {
 	g := &GoSync{
-		wChan:   newChanOnce[struct{}](1),
+		wChan: chanOnce[struct{}]{
+			ch: make(chan struct{}, 1),
+		},
 		errChan: make(chan error, 1),
-		errs:    newError(),
-		panic:   newError(),
+		//errs:    newError(),
+		//panic:   newError(),
 	}
 
 	return g
@@ -103,6 +114,19 @@ func (g *GoSync) reset(config Config) {
 	g.workers = int64(config.GoCount)
 	g.wait = config.Wait
 	g.reuse = !config.NotReuse
+	g.errChanOnce = sync.Once{}
+	g.working.Store(0)
+	g.done.Store(0)
+	if config.Limit > 0 && cap(g.limit) != config.Limit {
+		g.limit = make(chan struct{}, config.Limit)
+	} else if config.Limit == 0 {
+		g.limit = nil
+	}
+
+	if g.wChan.ch != nil {
+		g.wChan.closed = false
+		g.wChan.send = 0
+	}
 }
 
 func (g *GoSync) Go(f func() error) error {
@@ -148,11 +172,11 @@ func (g *GoSync) recover() {
 			g.mu.Lock()
 			g.finish = true
 			g.mu.Unlock()
-			g.wChan.close()
+			g.wChan.sentOnce(struct{}{})
 		}
 	}
 	if g.done.Add(1) == g.workers {
-		g.wChan.close()
+		g.wChan.sentOnce(struct{}{})
 	}
 	if g.limit != nil {
 		<-g.limit
@@ -189,7 +213,11 @@ func (g *GoSync) Err(err error) {
 // Wait wait=false(默认):如何执行的异步任务出现了err或者panic会立刻返回，未启动的任务也不再启动,返回的err信息将会是1个err或者一个panicErr
 // wait=true:会等待所有任务执行完毕才会返回,会返回全部的panicErr和err
 func (g *GoSync) Wait() error {
-	defer g.close()
+	defer func() {
+		g.panic.errs = nil
+		g.errs.errs = nil
+		gp.gsPool.Put(g)
+	}()
 	select {
 	case <-g.wChan.getChan():
 	case err := <-g.errChan:
@@ -211,9 +239,9 @@ func (g *GoSync) Wait() error {
 		b.WriteString(msg)
 	}
 
-	es := g.errs
-	if len(es.errs) > 0 {
-		msg = es.Error()
+	es := g.errs.errs
+	if len(es) > 0 {
+		msg = g.errs.Error()
 		b.Grow(len(msg) + 10)
 		b.WriteString("\n")
 		b.WriteString(Red.Add("ERROR:"))

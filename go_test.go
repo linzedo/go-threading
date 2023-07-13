@@ -1,19 +1,16 @@
 package threading
 
-//
-//import (
-//	"errors"
-//	"fmt"
-//	"runtime"
-//	"testing"
-//	"time"
-//)
-//
-//func TestMain(m *testing.M) {
-//	//goleak.VerifyTestMain(m)
-//	runtime.GOMAXPROCS(4)
-//	m.Run()
-//}
+import (
+	"runtime"
+	"testing"
+)
+
+func TestMain(m *testing.M) {
+	//goleak.VerifyTestMain(m)
+	runtime.GOMAXPROCS(4)
+	m.Run()
+}
+
 //
 //func TestGoWait(t *testing.T) {
 //	gs := New(Config{
@@ -78,7 +75,7 @@ package threading
 //}
 //
 //func TestGoSyncReuse(t *testing.T) {
-//	for i := 0; i < 1000; i++ {
+//	for i := 0; i < 2; i++ {
 //		gs := New(Config{
 //			Limit:   5,
 //			GoCount: 4,

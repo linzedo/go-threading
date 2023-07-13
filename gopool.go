@@ -10,16 +10,17 @@ import (
 const (
 	DefaultMaxWorkCount   = 256 * 1024
 	DefaultOverJobCount   = 10
-	MaxIdleWorkerDuration = time.Second * 10
+	MaxIdleWorkerDuration = time.Second * 20
 )
 
 type (
 	goPool struct {
-		MaxWorkCount          int64
+		MaxWorkCount          int
+		MinWorkCount          int
 		MaxIdleWorkerDuration time.Duration
 
 		going      []*goChan //就绪队列，可获取已就绪routine的通讯,写入/移除过程保证有序
-		goCount    int64     //正在执行任务数量
+		goCount    int       //正在执行任务数量
 		goChanPool sync.Pool //通讯池
 		gsPool     sync.Pool //对象池
 		mu         sync.Mutex
@@ -44,15 +45,32 @@ var (
 	once   sync.Once
 )
 
-func SetMaxWorkCount(count int64) PoolOpt {
+func SetMaxWorkCount(count int) PoolOpt {
 	return func(*goPool) {
 		if gp == nil || count == 0 {
 			return
 		}
-		if count == -1 {
+		if count < 0 {
 			gp.MaxWorkCount = math.MaxInt
 		}
 		gp.MaxWorkCount = count
+		if gp.MinWorkCount > gp.MaxWorkCount && gp.MaxWorkCount > 0 {
+			gp.MinWorkCount = gp.MaxWorkCount
+		}
+	}
+}
+
+func SetMinWorkCount(count int) PoolOpt {
+	return func(*goPool) {
+		if gp == nil || count == 0 {
+			return
+		}
+		if count > 0 {
+			gp.MinWorkCount = count
+		}
+		if gp.MinWorkCount > gp.MaxWorkCount && gp.MaxWorkCount > 0 {
+			gp.MinWorkCount = gp.MaxWorkCount
+		}
 	}
 }
 
@@ -90,7 +108,9 @@ func newGoPool() *goPool {
 				return &goChan{task: make(chan *task, goChanCap)}
 			},
 		},
-		//gsPool: sync.Pool{New: func()any {return newGoS()} },
+		gsPool: sync.Pool{New: func() any {
+			return newGoS()
+		}},
 	}
 }
 
@@ -106,20 +126,33 @@ func runGlobalTasks(t *task) {
 	gs.Err(t.job())
 }
 
-func startPool(opt ...PoolOpt) {
+func StartPool(opt ...PoolOpt) {
 	once.Do(func() {
+		initPath()
 		gp = newGoPool()
-
 		for i := range opt {
 			opt[i](gp)
 		}
-
 		gp.start()
 	})
 }
 
 func (p *goPool) start() {
 	allJob = make(chan *task, DefaultOverJobCount)
+	p.mu.Lock()
+	need := p.MinWorkCount - len(p.going)
+	if need > 0 {
+		for i := 0; i < need; i++ {
+			ch := p.goChanPool.Get().(*goChan)
+			go func() {
+				//执行任务
+				p.goFunc(ch)
+				p.goChanPool.Put(ch)
+			}()
+			p.going = append(p.going, ch)
+		}
+	}
+	p.mu.Unlock()
 	//开启清扫任务
 	go func() {
 		var scratch []*goChan
@@ -131,7 +164,6 @@ func (p *goPool) start() {
 			}
 		}
 	}()
-
 	//go开启全局任务处理
 	go func() {
 		for t := range allJob {
@@ -172,7 +204,6 @@ func (p *goPool) getCh() *goChan {
 	}
 
 	p.mu.Unlock()
-
 	if ch == nil {
 		if !newGo {
 			return nil
@@ -191,7 +222,6 @@ func (p *goPool) goFunc(ch *goChan) {
 	var (
 		t *task
 	)
-
 	defer func() {
 		p.mu.Lock()
 		p.goCount--
@@ -221,7 +251,6 @@ func (p *goPool) goFunc(ch *goChan) {
 func runTask(t *task) {
 	gs := t.gs
 	defer gs.recover()
-
 	gs.Err(t.job())
 }
 
@@ -240,7 +269,6 @@ func (p *goPool) clean(scratch *[]*goChan) {
 	p.mu.Lock()
 	going := p.going
 	park := len(going)
-
 	//清除超过闲置时间未使用的通讯
 	l, r, mid := 0, park-1, 0
 	for l <= r {
@@ -251,8 +279,8 @@ func (p *goPool) clean(scratch *[]*goChan) {
 			r = mid - 1
 		}
 	}
-	i := r
-	if i == -1 {
+	i := r - p.MinWorkCount
+	if i < 0 {
 		p.mu.Unlock()
 		return
 	}
