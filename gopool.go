@@ -147,7 +147,6 @@ func (p *goPool) start() {
 			go func() {
 				//执行任务
 				p.goFunc(ch)
-				p.goChanPool.Put(ch)
 			}()
 			p.going = append(p.going, ch)
 		}
@@ -216,6 +215,12 @@ func (p *goPool) getCh() *goChan {
 		}()
 	}
 	return ch
+}
+
+func (p *goPool) Going() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.goCount
 }
 
 func (p *goPool) goFunc(ch *goChan) {

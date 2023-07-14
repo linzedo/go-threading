@@ -5,20 +5,24 @@ import (
 	"github.com/panjf2000/ants"
 	"sync"
 	"testing"
+	"time"
 )
 
 const (
 	Concurrency = 10
 	executeTime = 10000
-	goCount     = 10
+	goCount     = 10000
 )
 
 func Job() {
-	for i := 0; i < 100000; i++ {
-		i++
-	}
+	time.Sleep(time.Millisecond * 10)
+	//for i := 0; i < 10000; i++ {
+	//	i++
+	//}
 }
-
+func TestMain(m *testing.M) {
+	m.Run()
+}
 func BenchmarkCurrent1Reuse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		WithReuse(Concurrency)
@@ -44,11 +48,10 @@ func BenchmarkCurrent1kReuse(b *testing.B) {
 }
 
 func BenchmarkCurrent10kReuse(b *testing.B) {
-	//StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMaxWorkCount(10000))
+	StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMinWorkCount(goCount))
 	for i := 0; i < b.N; i++ {
 		gs := New(Config{
 			GoCount: goCount,
-			Wait:    true,
 		})
 		for j := 0; j < goCount; j++ {
 			_ = gs.Go(func() error {
@@ -72,10 +75,11 @@ func BenchmarkCurrent10kReuseFactory(b *testing.B) {
 		}
 		line1.Wait()
 	}
+
 }
 
 func BenchmarkCurrent10kReuseAnt(b *testing.B) {
-	p, _ := ants.NewPool(goCount)
+	var p, _ = ants.NewPool(goCount)
 	for i := 0; i < b.N; i++ {
 		var wg sync.WaitGroup
 		for j := 0; j < goCount; j++ {
@@ -84,11 +88,11 @@ func BenchmarkCurrent10kReuseAnt(b *testing.B) {
 				Job()
 				wg.Done()
 			})
-
 		}
 		wg.Wait()
+		p.Release()
 	}
-	p.Release()
+
 }
 
 func BenchmarkCurrent1NotReuse1(b *testing.B) {

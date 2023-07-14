@@ -1,16 +1,5 @@
 package threading
 
-import (
-	"runtime"
-	"testing"
-)
-
-func TestMain(m *testing.M) {
-	//goleak.VerifyTestMain(m)
-	runtime.GOMAXPROCS(4)
-	m.Run()
-}
-
 //
 //func TestGoWait(t *testing.T) {
 //	gs := New(Config{
