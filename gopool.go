@@ -100,18 +100,17 @@ var goChanCap = func() int {
 }()
 
 func newGoPool() *goPool {
-	return &goPool{
+	g := &goPool{
 		MaxIdleWorkerDuration: MaxIdleWorkerDuration,
 		MaxWorkCount:          DefaultMaxWorkCount,
-		goChanPool: sync.Pool{
-			New: func() any {
-				return &goChan{task: make(chan *task, goChanCap)}
-			},
-		},
-		gsPool: sync.Pool{New: func() any {
-			return newGoS()
-		}},
 	}
+	g.goChanPool.New = func() any {
+		return &goChan{task: make(chan *task, goChanCap)}
+	}
+	g.gsPool.New = func() any {
+		return newGoS()
+	}
+	return g
 }
 
 func newWorkerChan() *goChan {

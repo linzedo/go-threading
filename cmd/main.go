@@ -13,12 +13,14 @@ func main() {
 	go func() {
 		for {
 			gs := threading.New(threading.Config{
-				GoCount: 1000,
+				GoCount: 10000,
 				Wait:    true,
 			})
-			for j := 0; j < 100; j++ {
+			for j := 0; j < 10000; j++ {
 				_ = gs.Go(func() error {
-					time.Sleep(time.Microsecond * 100)
+					for i := 0; i < 100000; i++ {
+						i++
+					}
 					return nil
 				})
 			}

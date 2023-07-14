@@ -5,20 +5,19 @@ import (
 	"github.com/panjf2000/ants"
 	"sync"
 	"testing"
-	"time"
 )
 
 const (
 	Concurrency = 10
 	executeTime = 10000
-	goCount     = 10000
+	goCount     = 10
 )
 
 func Job() {
-	time.Sleep(time.Millisecond * 10)
-	//for i := 0; i < 10000; i++ {
-	//	i++
-	//}
+	//time.Sleep(time.Millisecond * 10)
+	for i := 0; i < 1000; i++ {
+		i++
+	}
 }
 func TestMain(m *testing.M) {
 	m.Run()
@@ -48,7 +47,7 @@ func BenchmarkCurrent1kReuse(b *testing.B) {
 }
 
 func BenchmarkCurrent10kReuse(b *testing.B) {
-	StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMinWorkCount(goCount))
+	//StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMinWorkCount(goCount))
 	for i := 0; i < b.N; i++ {
 		gs := New(Config{
 			GoCount: goCount,
@@ -90,8 +89,8 @@ func BenchmarkCurrent10kReuseAnt(b *testing.B) {
 			})
 		}
 		wg.Wait()
-		p.Release()
 	}
+	p.Release()
 
 }
 
