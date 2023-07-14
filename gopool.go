@@ -153,9 +153,9 @@ func (p *goPool) start() {
 	p.mu.Unlock()
 	//开启清扫任务
 	go func() {
-		var scratch []*goChan
+		var reuse []*goChan
 		for {
-			p.clean(&scratch)
+			p.clean(&reuse)
 			select {
 			default:
 				time.Sleep(p.MaxIdleWorkerDuration)
@@ -266,7 +266,7 @@ func (p *goPool) release(ch *goChan) {
 }
 
 //最大闲置清扫
-func (p *goPool) clean(scratch *[]*goChan) {
+func (p *goPool) clean(reuse *[]*goChan) {
 	maxIdleGoDuration := p.MaxIdleWorkerDuration
 	currentTime := time.Now().Add(-maxIdleGoDuration)
 
@@ -289,7 +289,7 @@ func (p *goPool) clean(scratch *[]*goChan) {
 		return
 	}
 
-	*scratch = append((*scratch)[:0], going[:i+1]...)
+	*reuse = append((*reuse)[:0], going[:i+1]...)
 	m := copy(going, going[i+1:])
 	for i = m; i < park; i++ {
 		going[i] = nil
@@ -297,7 +297,7 @@ func (p *goPool) clean(scratch *[]*goChan) {
 	p.going = going[:m]
 	p.mu.Unlock()
 
-	tmp := *scratch
+	tmp := *reuse
 	for i := range tmp {
 		tmp[i].task <- nil
 		tmp[i] = nil
