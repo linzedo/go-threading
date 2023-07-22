@@ -1,7 +1,6 @@
 package threading
 
 import (
-	"github.com/panjf2000/ants"
 	"go.uber.org/atomic"
 	"sync"
 	"testing"
@@ -68,22 +67,22 @@ func BenchmarkCurrent10kReuse(b *testing.B) {
 }
 
 //ant
-func BenchmarkCurrent10kReuseAnt(b *testing.B) {
-	var p, _ = ants.NewPool(goCount)
-	for i := 0; i < b.N; i++ {
-		var wg sync.WaitGroup
-		for j := 0; j < goCount; j++ {
-			wg.Add(1)
-			_ = p.Submit(func() {
-				Job()
-				wg.Done()
-			})
-		}
-		wg.Wait()
-	}
-	p.Release()
-
-}
+//func BenchmarkCurrent10kReuseAnt(b *testing.B) {
+//	var p, _ = ants.NewPool(goCount)
+//	for i := 0; i < b.N; i++ {
+//		var wg sync.WaitGroup
+//		for j := 0; j < goCount; j++ {
+//			wg.Add(1)
+//			_ = p.Submit(func() {
+//				Job()
+//				wg.Done()
+//			})
+//		}
+//		wg.Wait()
+//	}
+//	p.Release()
+//
+//}
 
 //factory
 //func BenchmarkCurrent10kReuseFactory(b *testing.B) {
