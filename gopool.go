@@ -141,6 +141,7 @@ func (p *goPool) start() {
 	p.mu.Lock()
 	need := p.MinWorkCount - len(p.going)
 	if need > 0 {
+		p.going = make([]*goChan, 0, need)
 		for i := 0; i < need; i++ {
 			ch := p.goChanPool.Get().(*goChan)
 			go func() {

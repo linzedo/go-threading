@@ -1,27 +1,32 @@
 package threading
 
 import (
-	"github.com/letsfire/factory"
 	"github.com/panjf2000/ants"
+	"go.uber.org/atomic"
 	"sync"
 	"testing"
+	"time"
 )
 
 const (
 	Concurrency = 10
 	executeTime = 10000
-	goCount     = 10
+	goCount     = 1000
 )
 
+var add atomic.Int64
+
 func Job() {
-	//time.Sleep(time.Millisecond * 10)
-	for i := 0; i < 1000; i++ {
+	add.Add(1)
+	time.Sleep(time.Millisecond * 50)
+	for i := 0; i < 10000; i++ {
 		i++
 	}
 }
 func TestMain(m *testing.M) {
 	m.Run()
 }
+
 func BenchmarkCurrent1Reuse(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		WithReuse(Concurrency)
@@ -47,7 +52,7 @@ func BenchmarkCurrent1kReuse(b *testing.B) {
 }
 
 func BenchmarkCurrent10kReuse(b *testing.B) {
-	//StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMinWorkCount(goCount))
+	StartPool(SetMaxIdleWorkerDuration(time.Second*30), SetMinWorkCount(goCount))
 	for i := 0; i < b.N; i++ {
 		gs := New(Config{
 			GoCount: goCount,
@@ -62,21 +67,7 @@ func BenchmarkCurrent10kReuse(b *testing.B) {
 	}
 }
 
-//factory
-func BenchmarkCurrent10kReuseFactory(b *testing.B) {
-	var master = factory.NewMaster(goCount, goCount)
-	for i := 0; i < b.N; i++ {
-		var line1 = master.AddLine(func(args interface{}) {
-			Job()
-		})
-		for j := 0; j < goCount; j++ {
-			line1.Submit(j)
-		}
-		line1.Wait()
-	}
-
-}
-
+//ant
 func BenchmarkCurrent10kReuseAnt(b *testing.B) {
 	var p, _ = ants.NewPool(goCount)
 	for i := 0; i < b.N; i++ {
@@ -93,6 +84,21 @@ func BenchmarkCurrent10kReuseAnt(b *testing.B) {
 	p.Release()
 
 }
+
+//factory
+//func BenchmarkCurrent10kReuseFactory(b *testing.B) {
+//	var master = factory.NewMaster(goCount, goCount)
+//	for i := 0; i < b.N; i++ {
+//		var line1 = master.AddLine(func(args interface{}) {
+//			Job()
+//		})
+//		for j := 0; j < goCount; j++ {
+//			line1.Submit(j)
+//		}
+//		line1.Wait()
+//	}
+//
+//}
 
 func BenchmarkCurrent1NotReuse1(b *testing.B) {
 	for i := 0; i < b.N; i++ {
@@ -125,14 +131,9 @@ func BenchmarkCurrent10NotReuse2(b *testing.B) {
 		WithoutReuse2(Concurrency * 10)
 	}
 }
-func BenchmarkCurrent100NotReuse2(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		WithoutReuse2(Concurrency * 100)
-	}
-}
 func BenchmarkCurrent10kNotReuse2(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		WithoutReuse2(Concurrency * 10000)
+		WithoutReuse2(goCount)
 	}
 }
 
