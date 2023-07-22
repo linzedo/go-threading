@@ -1,5 +1,5 @@
 # go-threading
-受号称比net/http标准库快10倍的fasthttp https://github.com/valyala/fasthttp 启发，参考其资源复用模型开发的go协程池，可控制任务并发以及减少大量内存分配，减少gc压力。
+号称比net/http标准库快10倍的fasthttp https://github.com/valyala/fasthttp ,参考其资源复用模型开发的go协程池，可控制任务并发以及减少大量内存分配，减少gc压力。
 # 安装
 > go get github.com/linzedo/go-threading
 
