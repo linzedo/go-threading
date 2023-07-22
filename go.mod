@@ -1,4 +1,4 @@
-module go-threading
+module github.com/linzedo/go-threading
 
 go 1.18
 
