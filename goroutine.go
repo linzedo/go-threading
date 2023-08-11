@@ -218,6 +218,9 @@ func (g *GoSync) Wait() error {
 		g.errs.errs = nil
 		gp.gsPool.Put(g)
 	}()
+	if g.workers == 0 {
+		return nil
+	}
 	select {
 	case <-g.wChan.getChan():
 	case err := <-g.errChan:
