@@ -13,7 +13,7 @@
 	})
 	for j := 0; j < c; j++ {
 		_ = gs.Go(func() error {
-			... //逻辑擦欧总
+			... //逻辑代码
 			if err!=nil{
 			    gs.Err(err)//手动记录错误	
             }   
